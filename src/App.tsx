@@ -10,6 +10,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { useAuth } from './context/AuthContext';
 import LeafletMap from './components/LeafletMap';
+import AdminDashboard from './components/AdminDashboard';
 
 import desktopBg from './assets/images/bench_welcome_desktop_1782569187419.jpg';
 import mobileBg from './assets/images/bench_welcome_mobile_1782569205002.jpg';
@@ -18,18 +19,25 @@ import tabletBg from './assets/images/bench_welcome_tablet_1782569218564.jpg';
 export default function App() {
   const { user, profile, loading, error, signInWithGoogle, logout, clearError } = useAuth();
   const [currentPath, setCurrentPath] = useState(() => {
-    return window.location.pathname === '/where-we-are' ? '/where-we-are' : '/';
+    const path = window.location.pathname;
+    if (path === '/where-we-are') return '/where-we-are';
+    if (path === '/admin') return '/admin';
+    return '/';
   });
   const [mapTheme, setMapTheme] = useState<'dark' | 'warm' | 'original'>('dark');
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Automatically redirect unauthorized users back to home if they attempt to access the map
+  // Automatically redirect unauthorized users back to home if they attempt to access protected routes
   useEffect(() => {
     if (currentPath === '/where-we-are' && !user) {
       setCurrentPath('/');
       window.history.pushState({}, '', '/');
     }
-  }, [currentPath, user]);
+    if (currentPath === '/admin' && (!user || profile?.role !== 'admin')) {
+      setCurrentPath('/');
+      window.history.pushState({}, '', '/');
+    }
+  }, [currentPath, user, profile]);
 
   const triggerDbWrite = async () => {
     try {
@@ -43,7 +51,14 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentPath(window.location.pathname === '/where-we-are' ? '/where-we-are' : '/');
+      const path = window.location.pathname;
+      if (path === '/where-we-are') {
+        setCurrentPath('/where-we-are');
+      } else if (path === '/admin') {
+        setCurrentPath('/admin');
+      } else {
+        setCurrentPath('/');
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -129,6 +144,25 @@ export default function App() {
               <MapIcon className="w-4 h-4" />
             </motion.button>
           )}
+
+          {/* Admin shortcut button */}
+          {user && profile?.role === 'admin' && (
+            <motion.button
+              id="nav-admin-btn"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              onClick={() => navigateTo('/admin')}
+              className={`p-2.5 rounded-full transition-all duration-300 flex items-center justify-center border backdrop-blur-md cursor-pointer ${
+                currentPath === '/admin' 
+                  ? 'bg-white/20 border-white/40 text-white shadow-lg shadow-black/10' 
+                  : 'bg-black/20 border-white/10 text-[#EAE7E1]/60 hover:text-white hover:bg-white/15 hover:border-white/20'
+              }`}
+              title="Panel Administratora (Admin)"
+            >
+              <Shield className="w-4 h-4" />
+            </motion.button>
+          )}
         </div>
       </div>
 
@@ -180,12 +214,25 @@ export default function App() {
                     <span className="capitalize font-semibold text-white">{profile?.role || 'admin'}</span>
                   </div>
 
+                  {profile?.role === 'admin' && (
+                    <button
+                      onClick={() => {
+                        setShowDropdown(false);
+                        navigateTo('/admin');
+                      }}
+                      className="w-full mt-1 px-3 py-2 rounded-lg bg-[#8C8476]/20 hover:bg-[#8C8476]/30 text-white border border-[#8C8476]/40 hover:border-[#8C8476]/60 transition-all text-xs flex items-center justify-center gap-2 cursor-pointer font-sans"
+                    >
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Panel Administratora</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={() => {
                       setShowDropdown(false);
                       logout();
                     }}
-                    className="w-full mt-1 px-3 py-2 rounded-lg bg-white/5 hover:bg-red-500/10 text-[#EAE7E1] hover:text-red-400 border border-white/10 hover:border-red-500/25 transition-all text-xs flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full px-3 py-2 rounded-lg bg-white/5 hover:bg-red-500/10 text-[#EAE7E1] hover:text-red-400 border border-white/10 hover:border-red-500/25 transition-all text-xs flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Wyloguj się</span>
@@ -244,7 +291,7 @@ export default function App() {
       </div>
 
       {/* View Router Routing Content */}
-      <div className="w-full h-full flex flex-col items-center justify-center z-20">
+      <div className="w-full h-full flex flex-col items-center justify-center z-20 overflow-y-auto pt-24 pb-20 px-4">
         <AnimatePresence mode="wait">
           {currentPath === '/' ? (
             /* ================= HOME VIEW ================= */
@@ -302,6 +349,21 @@ export default function App() {
                 Pozdrawiają "warsztaty programistyczne" dla wyjątkowych gości odwiedzających nasze skromne progi.
               </motion.p>
             </motion.main>
+          ) : currentPath === '/admin' ? (
+            /* ================= ADMIN VIEW ================= */
+            /* Guarded view: Only allowed if user is authenticated and is an admin */
+            user && profile?.role === 'admin' && (
+              <motion.div
+                key="admin-view"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5 }}
+                className="w-full flex justify-center"
+              >
+                <AdminDashboard onBack={() => navigateTo('/')} />
+              </motion.div>
+            )
           ) : (
             /* ================= MAP VIEW ================= */
             /* Guarded view: Only allowed if user is authenticated */
