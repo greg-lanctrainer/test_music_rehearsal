@@ -6,6 +6,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Home, Map as MapIcon } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from './lib/firebase';
 import LeafletMap from './components/LeafletMap';
 
 import desktopBg from './assets/images/bench_welcome_desktop_1782569187419.jpg';
@@ -17,6 +19,16 @@ export default function App() {
     return window.location.pathname === '/where-we-are' ? '/where-we-are' : '/';
   });
   const [mapTheme, setMapTheme] = useState<'dark' | 'warm' | 'original'>('dark');
+
+  const triggerDbWrite = async () => {
+    try {
+      const docRef = doc(db, 'days', '2026-06-27');
+      await setDoc(docRef, { today: '2026-06-27' });
+      console.log('Database Write Test Successful!');
+    } catch (error) {
+      console.error('Database Write Test Failed Direct Error:', error);
+    }
+  };
 
   useEffect(() => {
     const handlePopState = () => {
@@ -87,7 +99,10 @@ export default function App() {
           
           <button
             id="nav-map-btn"
-            onClick={() => navigateTo('/where-we-are')}
+            onClick={() => {
+              triggerDbWrite();
+              navigateTo('/where-we-are');
+            }}
             className={`p-2.5 rounded-full transition-all duration-300 flex items-center justify-center border backdrop-blur-md cursor-pointer ${
               currentPath === '/where-we-are' 
                 ? 'bg-white/20 border-white/40 text-white shadow-lg shadow-black/10' 

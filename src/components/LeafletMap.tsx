@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface LeafletMapProps {
   theme: 'dark' | 'warm' | 'original';
@@ -8,6 +10,25 @@ interface LeafletMapProps {
 export default function LeafletMap({ theme }: LeafletMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
+
+  // Incremental DB Read Test
+  useEffect(() => {
+    const testRead = async () => {
+      try {
+        const docRef = doc(db, 'days', '2026-06-27');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          console.log('Database Read Test Successful!', docSnap.data());
+        } else {
+          console.log('Database Read Test Successful! (Document "2026-06-27" does not exist yet.)');
+        }
+      } catch (error) {
+        console.error('Database Read Test Failed Direct Error:', error);
+      }
+    };
+
+    testRead();
+  }, []);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;

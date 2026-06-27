@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "Day": {
+      "title": "Day",
+      "description": "Incremental test day document",
+      "type": "object",
+      "properties": {
+        "today": {
+          "type": "string",
+          "description": "ISO date string formatted as YYYY-MM-DD"
+        }
+      },
+      "required": ["today"]
+    }
+  },
+  "firestore": {
+    "/days/{dayId}": {
+      "schema": "#/entities/Day",
+      "description": "Incremental test collection of days"
+    }
+  }
+}
