@@ -27,9 +27,12 @@ export default function App() {
   const [mapTheme, setMapTheme] = useState<'dark' | 'warm' | 'original'>('dark');
   const [showDropdown, setShowDropdown] = useState(false);
 
+  // Users can enter the map route only if they are logged in and approved (admin or isActive: true)
+  const isApproved = !!user && (profile?.role === 'admin' || profile?.isActive === true);
+
   // Automatically redirect unauthorized users back to home if they attempt to access protected routes
   useEffect(() => {
-    if (currentPath === '/where-we-are' && !user) {
+    if (currentPath === '/where-we-are' && !isApproved) {
       setCurrentPath('/');
       window.history.pushState({}, '', '/');
     }
@@ -37,7 +40,7 @@ export default function App() {
       setCurrentPath('/');
       window.history.pushState({}, '', '/');
     }
-  }, [currentPath, user, profile]);
+  }, [currentPath, user, profile, isApproved]);
 
   const triggerDbWrite = async () => {
     try {
@@ -124,7 +127,7 @@ export default function App() {
           </button>
           
           {/* Only signed-in users should see and be able to click the active map menu button */}
-          {user && (
+          {isApproved && (
             <motion.button
               id="nav-map-btn"
               initial={{ opacity: 0, scale: 0.8 }}
@@ -348,6 +351,31 @@ export default function App() {
               >
                 Pozdrawiają "warsztaty programistyczne" dla wyjątkowych gości odwiedzających nasze skromne progi.
               </motion.p>
+
+              {/* Status display for logged-in but unapproved users */}
+              {user && !isApproved && (
+                <motion.div
+                  id="pending-approval-card"
+                  initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.5 }}
+                  className="mt-8 px-6 py-4 rounded-xl bg-amber-950/45 border border-amber-500/30 backdrop-blur-md max-w-md w-full flex flex-col items-center gap-2 text-center"
+                >
+                  <div className="flex items-center gap-2 text-amber-400 font-sans text-[11px] font-semibold uppercase tracking-wider">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span>Oczekiwanie na zatwierdzenie</span>
+                  </div>
+                  <p className="text-xs text-[#FAF8F5] font-sans font-medium">
+                    Registered but awaiting Admin approval
+                  </p>
+                  <p className="text-[11px] text-[#D4CEC5]/80 font-sans leading-normal">
+                    Twoje konto zostało zarejestrowane. Administrator musi aktywować Twój profil, aby udostępnić mapę.
+                  </p>
+                </motion.div>
+              )}
             </motion.main>
           ) : currentPath === '/admin' ? (
             /* ================= ADMIN VIEW ================= */

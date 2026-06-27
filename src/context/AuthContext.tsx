@@ -56,49 +56,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (firebaseUser) {
         const email = firebaseUser.email || '';
-        
-        // 1. Check if the user email matches the authorized developer email
-        if (email.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
-          console.error(`Access rejected for unauthorized email: ${email}`);
-          setError('Brak uprawnień. Tylko deweloper (latuszek.grzegorz@gmail.com) może się zalogować.');
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
-          // Sign out of Firebase Auth to completely clear session
-          try {
-            await signOut(auth);
-          } catch (err) {
-            console.error('Error signing out unauthorized user:', err);
-          }
-          return;
-        }
-
-        // 2. Check/Create profile document in Firestore
         const userRef = doc(db, 'users', firebaseUser.uid);
+        let userRole: 'admin' | 'user' = 'user';
+        let userActiveStatus = false;
+
         try {
           const userSnap = await getDoc(userRef);
           
           if (!userSnap.exists()) {
             const name = firebaseUser.displayName || 'Anonimowy Użytkownik';
             const initials = generateInitials(name);
+            const isAdmin = email.toLowerCase() === ALLOWED_EMAIL.toLowerCase();
+            userRole = isAdmin ? 'admin' : 'user';
+            userActiveStatus = isAdmin; // true for developer, false for others
+
             const newProfile: UserProfile = {
               uid: firebaseUser.uid,
               name,
               email: email,
               initials,
-              role: 'admin', // as requested: set role to admin
-              isActive: true, // as requested: default isActive to true
+              role: userRole,
+              isActive: userActiveStatus,
             };
 
             await setDoc(userRef, newProfile);
-            console.log('Created new admin user profile in Firestore for:', email);
+            console.log(`[Auth] Registered new user in Firestore: ${email} with role: ${userRole}, active: ${userActiveStatus}`);
+          } else {
+            const existingData = userSnap.data() as UserProfile;
+            userRole = existingData.role;
+            userActiveStatus = existingData.isActive;
           }
         } catch (err) {
-          console.error('Error checking or creating user profile in Firestore:', err);
+          console.error('[Auth] Error checking or creating user profile in Firestore:', err);
         }
 
-        // Log successful sign in
-        console.log(`User signed in: ${firebaseUser.displayName || 'Anonimowy'} (${email}) [UID: ${firebaseUser.uid}]`);
+        // Log successful sign-in
+        console.log(`[Auth Log] Who signed in: ${firebaseUser.displayName || 'Anonimowy'} (${email}) [UID: ${firebaseUser.uid}] [Role: ${userRole}] [Active: ${userActiveStatus}]`);
         setUser(firebaseUser);
 
         // 3. Subscribe to user profile updates
@@ -108,14 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           setLoading(false);
         }, (err) => {
-          console.error('Error subscribing to user profile:', err);
+          console.error('[Auth] Error subscribing to user profile:', err);
           setLoading(false);
         });
 
       } else {
         // Log sign out if we had a user before
         if (user) {
-          console.log(`User signed out: ${user.email}`);
+          console.log(`[Auth Log] Who signed out: ${user.displayName || 'Anonimowy'} (${user.email || 'N/A'}) [UID: ${user.uid}]`);
         }
         setUser(null);
         setProfile(null);
