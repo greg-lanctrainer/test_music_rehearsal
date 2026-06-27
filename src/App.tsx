@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Home, Map as MapIcon, LogIn, LogOut, Shield, User as UserIcon, AlertTriangle } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
+import { Home, Map as MapIcon, LogIn, LogOut, Shield, User as UserIcon, AlertTriangle, MapPin, MapPinOff, Navigation, RefreshCw } from 'lucide-react';
+import { doc, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { useAuth } from './context/AuthContext';
 import LeafletMap from './components/LeafletMap';
@@ -24,11 +24,145 @@ export default function App() {
     if (path === '/admin') return '/admin';
     return '/';
   });
-  const [mapTheme, setMapTheme] = useState<'dark' | 'warm' | 'original'>('dark');
-  const [showDropdown, setShowDropdown] = useState(false);
 
   // Users can enter the map route only if they are logged in and approved (admin or isActive: true)
   const isApproved = !!user && (profile?.role === 'admin' || profile?.isActive === true);
+
+  const [mapTheme, setMapTheme] = useState<'dark' | 'warm' | 'original'>('dark');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  const watchIdRef = useRef<number | null>(null);
+  const lastWriteTimeRef = useRef<number>(0);
+
+  // High-accuracy live GPS tracking effect
+  useEffect(() => {
+    const hasActiveCoords = typeof profile?.latitude === 'number' && typeof profile?.longitude === 'number';
+    const shouldWatch = currentPath === '/where-we-are' && isApproved && hasActiveCoords;
+
+    if (shouldWatch && navigator.geolocation) {
+      console.log('[Geolocation Watch] Starting active live tracking...');
+      
+      // Clear any previous active watch just in case
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        async (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          const now = Date.now();
+          
+          // Throttle updates to at most once every 3 seconds to avoid spamming the database
+          // while keeping the physical movement updates highly precise in real-time
+          if (now - lastWriteTimeRef.current > 3000) {
+            console.log(`[Geolocation Watch] Coordinates updated: ${latitude}, ${longitude} (Accuracy: ±${accuracy.toFixed(1)}m)`);
+            try {
+              if (user) {
+                const userRef = doc(db, 'users', user.uid);
+                await updateDoc(userRef, {
+                  latitude,
+                  longitude
+                });
+                lastWriteTimeRef.current = now;
+              }
+            } catch (err) {
+              console.error('[Geolocation Watch] Error auto-updating location in Firestore:', err);
+            }
+          }
+        },
+        (err) => {
+          console.warn('[Geolocation Watch] Warning/Error from hardware GPS:', err);
+          let msg = 'Live tracking warning.';
+          if (err.code === err.PERMISSION_DENIED) {
+            msg = 'Odrzucono dostęp do lokalizacji.';
+          } else if (err.code === err.POSITION_UNAVAILABLE) {
+            msg = 'Sygnał GPS niedostępny.';
+          }
+          console.warn(`[Geolocation Watch] ${msg}`);
+        },
+        { 
+          enableHighAccuracy: true, 
+          timeout: 20000, 
+          maximumAge: 0 // Force the browser to bypass any cache and fetch raw GPS readings
+        }
+      );
+    }
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        console.log('[Geolocation Watch] Stopping active live tracking...');
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, [currentPath, isApproved, typeof profile?.latitude === 'number', typeof profile?.longitude === 'number', user?.uid]);
+
+  const handleAddLocation = () => {
+    if (!user) return;
+    setLocating(true);
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setLocationError('Geolokalizacja nie jest obsługiwana przez Twoją przeglądarkę.');
+      setLocating(false);
+      return;
+    }
+
+    console.log('[Geolocation] Requesting current coordinates with high accuracy...');
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, {
+            latitude,
+            longitude
+          });
+          console.log(`[Geolocation] Successfully updated user location in Firestore: ${latitude}, ${longitude}`);
+        } catch (err) {
+          console.error('[Geolocation] Failed to save user location:', err);
+          setLocationError('Nie udało się zapisać lokalizacji w bazie danych.');
+        } finally {
+          setLocating(false);
+        }
+      },
+      (err) => {
+        console.error('[Geolocation] Geolocation query failed:', err);
+        let msg = 'Nie udało się pobrać lokalizacji.';
+        if (err.code === err.PERMISSION_DENIED) {
+          msg = 'Odrzucono dostęp do lokalizacji w przeglądarce.';
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          msg = 'Sygnał GPS / lokalizacja jest aktualnie niedostępna.';
+        } else if (err.code === err.TIMEOUT) {
+          msg = 'Przekroczono limit czasu żądania geolokalizacji.';
+        }
+        setLocationError(msg);
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
+
+  const handleRemoveLocation = async () => {
+    if (!user) return;
+    setLocating(true);
+    setLocationError(null);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        latitude: deleteField(),
+        longitude: deleteField()
+      });
+      console.log(`[Geolocation] Successfully removed user position from Firestore for: ${user.email}`);
+    } catch (err) {
+      console.error('[Geolocation] Failed to clear user location:', err);
+      setLocationError('Nie udało się usunąć lokalizacji z bazy danych.');
+    } finally {
+      setLocating(false);
+    }
+  };
 
   // Automatically redirect unauthorized users back to home if they attempt to access protected routes
   useEffect(() => {
@@ -415,6 +549,42 @@ export default function App() {
                   <p className="text-xs text-[#D4CEC5] font-sans leading-relaxed mb-4">
                     Trasa oraz punkt docelowy warsztatów programistycznych w malowniczej Lanckoronie.
                   </p>
+
+                  {/* Location Controls (Strictly on Map View Only) */}
+                  <div className="pt-3 pb-3 border-t border-white/10 flex flex-col gap-2">
+                    <span className="text-[9px] uppercase tracking-[0.15em] font-sans text-[#A09488]">Twoja obecność</span>
+                    
+                    {locationError && (
+                      <div className="text-[10px] text-red-400 bg-red-950/40 border border-red-500/20 px-2 py-1.5 rounded flex items-center gap-1.5 font-sans mb-1 leading-normal">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{locationError}</span>
+                      </div>
+                    )}
+
+                    {typeof profile?.latitude === 'number' && typeof profile?.longitude === 'number' ? (
+                      <button
+                        onClick={handleRemoveLocation}
+                        disabled={locating}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-lg bg-red-950/50 hover:bg-red-900/60 text-red-200 border border-red-500/30 hover:border-red-500/50 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none font-sans cursor-pointer font-medium"
+                      >
+                        <MapPinOff className="w-3.5 h-3.5" />
+                        <span>Usuń mnie z mapy</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleAddLocation}
+                        disabled={locating}
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-lg bg-[#8C8476]/30 hover:bg-[#8C8476]/50 text-white border border-[#8C8476]/45 hover:border-[#8C8476]/70 transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none font-sans cursor-pointer font-medium"
+                      >
+                        {locating ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <MapPin className="w-3.5 h-3.5 text-amber-400 animate-bounce" style={{ animationDuration: '2s' }} />
+                        )}
+                        <span>{locating ? 'Pobieranie lokalizacji...' : 'Dodaj mnie do mapy'}</span>
+                      </button>
+                    )}
+                  </div>
 
                   {/* Map Styling Theme Toggle */}
                   <div className="pt-3 border-t border-white/10 flex flex-col gap-2">

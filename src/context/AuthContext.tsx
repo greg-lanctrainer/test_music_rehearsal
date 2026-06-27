@@ -15,6 +15,8 @@ export interface UserProfile {
   initials: string;
   role: 'admin' | 'user';
   isActive: boolean;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface AuthContextType {

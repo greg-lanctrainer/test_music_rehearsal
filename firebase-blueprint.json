@@ -41,6 +41,14 @@
         "isActive": {
           "type": "boolean",
           "description": "Whether the user account is active"
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Current latitude of the user if on the map"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Current longitude of the user if on the map"
         }
       },
       "required": ["uid", "name", "email", "initials", "role", "isActive"]
