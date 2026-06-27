@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper to check if the user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Helper to get the user's document
+    function getUserDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+    
+    // Helper to check if a user is an admin
+    function isAdmin() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        getUserDoc(request.auth.uid).role == 'admin';
+    }
+    
+    // Helper to check if a user is active
+    function isActiveUser() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        (getUserDoc(request.auth.uid).isActive == true || getUserDoc(request.auth.uid).role == 'admin');
+    }
+
+    match /users/{userId} {
+      // Any authenticated user can read their own profile.
+      // Active users or admins can read all user profiles (needed for live map rendering and admin list).
+      allow read: if isSignedIn() && (request.auth.uid == userId || isActiveUser());
+      
+      // Allow creation of own profile if authenticated.
+      // Allow updates to own profile (like coordinates, name, initials), but restrict changing role or isActive status unless they are admin.
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (request.auth.uid == userId && 
+         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isActive']) ||
+          request.resource.data.role == resource.data.role && request.resource.data.isActive == resource.data.isActive)
+        )
+      );
+      
+      // Disallow deleting user accounts unless admin.
+      allow delete: if isAdmin();
+    }
+  }
+}

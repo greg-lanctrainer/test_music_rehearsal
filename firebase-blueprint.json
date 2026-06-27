@@ -1,0 +1,55 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with status, role, and coordinates",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The Google UID of the user"
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the user"
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user"
+        },
+        "initials": {
+          "type": "string",
+          "description": "The 2-character initials generated from their name"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether the user profile has been activated by an admin"
+        },
+        "role": {
+          "type": "string",
+          "description": "The role of the user (admin or user)"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Latitude of the user's current coordinate pinpoint"
+        },
+        "lng": {
+          "type": "number",
+          "description": "Longitude of the user's current coordinate pinpoint"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp of the last update"
+        }
+      },
+      "required": ["uid", "name", "email", "initials", "isActive", "role"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "#/entities/User",
+      "description": "Collection of user profiles containing status, role, and map coordinates"
+    }
+  }
+}
