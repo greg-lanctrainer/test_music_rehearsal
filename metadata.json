@@ -1,0 +1,6 @@
+{
+  "name": "Lanckorona Welcome Page",
+  "description": "A minimalist welcome webpage centering a warm greeting in a large, elegant typeface.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
